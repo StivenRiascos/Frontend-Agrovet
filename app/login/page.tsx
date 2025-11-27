@@ -1,23 +1,57 @@
-"use client"
+'use client'
 
-import type React from "react"
-
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
-import { Sprout } from "lucide-react"
+import React, { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import Link from 'next/link'
+import { Sprout } from 'lucide-react'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("[v0] Login attempt:", { email })
-    window.location.href = "/dashboard"
+    setError('')
+    setLoading(true)
+
+    try {
+      const res = await fetch('http://localhost:3001/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // ⚠️ NestJS espera "username" y "password" (no "email")
+        body: JSON.stringify({ nombre_usuario: email, password }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Credenciales incorrectas')
+      }
+
+      // Guardamos el token en localStorage para futuras peticiones
+      localStorage.setItem('token', data.access_token)
+
+      // Redirige al dashboard
+      window.location.href = '/dashboard'
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -42,12 +76,12 @@ export default function LoginPage() {
             <CardContent className="space-y-4 pt-6">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-emerald-900 font-medium cursor-pointer">
-                  Correo Electrónico
+                  Usuario o Correo
                 </Label>
                 <Input
                   id="email"
-                  type="email"
-                  placeholder="tu@email.com"
+                  type="text"
+                  placeholder="tu_usuario"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -70,14 +104,16 @@ export default function LoginPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
+              {error && <p className="text-red-600 text-center">{error}</p>}
               <Button
                 type="submit"
                 className="w-full cursor-pointer bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+                disabled={loading}
               >
-                Iniciar Sesión
+                {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </Button>
               <p className="text-sm text-emerald-700 text-center">
-                ¿No tienes cuenta?{" "}
+                ¿No tienes cuenta?{' '}
                 <Link
                   href="/register"
                   className="text-emerald-600 hover:text-emerald-800 font-semibold hover:underline cursor-pointer"
