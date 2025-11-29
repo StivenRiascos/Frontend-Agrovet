@@ -1,76 +1,128 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, Pencil, Trash2, Mail, Phone } from "lucide-react"
-import { CustomerDialog } from "@/components/customer-dialog"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Plus, Search, Pencil, Trash2, Mail, Phone } from 'lucide-react'
+import { CustomerDialog } from '@/components/customer-dialog'
+import { customerService } from '@/services/customerService'
 
+// TIPOS
 export type Customer = {
-  id: string
-  name: string
+  id: number
+  nombre_completo: string
+  tipo_documento_id: number
+  numero_documento: string
+  telefono: string
   email: string
-  phone: string
-  address: string
-  totalPurchases: number
-  lastPurchase: string
+  direccion: string
+  lista_precio_id: number
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([
-    {
-      id: "1",
-      name: "Juan Pérez",
-      email: "juan.perez@email.com",
-      phone: "+1 234 567 8900",
-      address: "Calle Principal 123, Ciudad",
-      totalPurchases: 5,
-      lastPurchase: "2025-01-15",
-    },
-    {
-      id: "2",
-      name: "María González",
-      email: "maria.gonzalez@email.com",
-      phone: "+1 234 567 8901",
-      address: "Avenida Central 456, Ciudad",
-      totalPurchases: 3,
-      lastPurchase: "2025-01-14",
-    },
-  ])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
 
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone.includes(searchQuery),
-  )
+  // CARGAR CLIENTES
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const response = await customerService.getCustomers()
 
-  const handleAddCustomer = (customer: Omit<Customer, "id" | "totalPurchases" | "lastPurchase">) => {
-    const newCustomer = {
-      ...customer,
-      id: Date.now().toString(),
-      totalPurchases: 0,
-      lastPurchase: "-",
+        // 🔥 Convertimos cliente_id → id
+        const list = Array.isArray(response?.data)
+          ? response.data.map((c: any) => ({
+              ...c,
+              id: c.cliente_id, // 👈 CORRECCIÓN CLAVE
+            }))
+          : []
+
+        setCustomers(list)
+      } catch (error) {
+        console.error('Error cargando clientes:', error)
+        setCustomers([]) // evitar undefined
+      }
     }
-    setCustomers([...customers, newCustomer])
-    setIsDialogOpen(false)
+    load()
+  }, [])
+
+  // ------------------------------
+  // FILTRO DE BÚSQUEDA
+  // ------------------------------
+  const filteredCustomers = (customers || [])
+    .filter((c) => c && typeof c === 'object' && c.nombre_completo)
+    .filter((customer) =>
+      `${customer.nombre_completo || ''} ${customer.email || ''} ${customer.telefono || ''} ${customer.direccion || ''}`
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase())
+    )
+
+  // GUARDAR (crear o editar)
+  const handleSave = async (data: any) => {
+    if (editingCustomer) {
+      await handleEditCustomer(data)
+    } else {
+      await handleAddCustomer(data)
+    }
   }
 
-  const handleEditCustomer = (customer: Customer) => {
-    setCustomers(customers.map((c) => (c.id === customer.id ? customer : c)))
-    setEditingCustomer(null)
-    setIsDialogOpen(false)
+  // CREAR CLIENTE
+  const handleAddCustomer = async (data: Omit<Customer, 'id'>) => {
+    try {
+      const response = await customerService.createCustomer(data)
+
+      // 🔥 Convertir cliente_id → id
+      const newCustomer = {
+        ...response.data,
+        id: response.data.cliente_id,
+      }
+
+      setCustomers([...(customers || []), newCustomer])
+      setIsDialogOpen(false)
+    } catch (error) {
+      console.error('Error creando cliente:', error)
+    }
   }
 
-  const handleDeleteCustomer = (id: string) => {
-    if (confirm("¿Estás seguro de que deseas eliminar este cliente?")) {
-      setCustomers(customers.filter((c) => c.id !== id))
+  // EDITAR CLIENTE
+  const handleEditCustomer = async (data: Customer) => {
+    try {
+      const response = await customerService.updateCustomer(String(data.id), data)
+
+      const updated = {
+        ...response.data,
+        id: response.data.cliente_id,
+      }
+
+      setCustomers((customers || []).map((c) => (c.id === data.id ? updated : c)))
+
+      setEditingCustomer(null)
+      setIsDialogOpen(false)
+    } catch (error) {
+      console.error('Error actualizando cliente:', error)
+    }
+  }
+
+  // ELIMINAR CLIENTE
+  const handleDeleteCustomer = async (id: number) => {
+    if (!confirm('¿Estás seguro de eliminar este cliente?')) return
+
+    try {
+      await customerService.deleteCustomer(String(id))
+      setCustomers((customers || []).filter((c) => c.id !== id))
+    } catch (error) {
+      console.error('Error eliminando cliente:', error)
     }
   }
 
@@ -97,40 +149,7 @@ export default function CustomersPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Clientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{customers.length}</div>
-            <p className="text-xs text-muted-foreground">Clientes registrados</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Clientes Activos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{customers.filter((c) => c.totalPurchases > 0).length}</div>
-            <p className="text-xs text-muted-foreground">Con compras realizadas</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Promedio de Compras</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {customers.length > 0
-                ? (customers.reduce((sum, c) => sum + c.totalPurchases, 0) / customers.length).toFixed(1)
-                : "0"}
-            </div>
-            <p className="text-xs text-muted-foreground">Compras por cliente</p>
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* BUSCADOR */}
       <Card>
         <CardHeader>
           <CardTitle>Directorio de Clientes</CardTitle>
@@ -149,6 +168,7 @@ export default function CustomersPage() {
             </div>
           </div>
 
+          {/* TABLA */}
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -156,51 +176,53 @@ export default function CustomersPage() {
                   <TableHead>Nombre</TableHead>
                   <TableHead>Contacto</TableHead>
                   <TableHead>Dirección</TableHead>
-                  <TableHead>Compras</TableHead>
-                  <TableHead>Última Compra</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {filteredCustomers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
                       No se encontraron clientes
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredCustomers.map((customer) => (
+                  filteredCustomers.map((customer: Customer) => (
                     <TableRow key={customer.id}>
-                      <TableCell className="font-medium">{customer.name}</TableCell>
+                      <TableCell className="font-medium">{customer.nombre_completo}</TableCell>
+
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1 text-sm">
                             <Mail className="h-3 w-3 text-muted-foreground" />
                             <span className="text-muted-foreground">{customer.email}</span>
                           </div>
+
                           <div className="flex items-center gap-1 text-sm">
                             <Phone className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-muted-foreground">{customer.phone}</span>
+                            <span className="text-muted-foreground">{customer.telefono}</span>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-[200px] truncate">{customer.address}</TableCell>
-                      <TableCell>
-                        <Badge variant={customer.totalPurchases > 0 ? "default" : "secondary"}>
-                          {customer.totalPurchases}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {customer.lastPurchase !== "-"
-                          ? new Date(customer.lastPurchase).toLocaleDateString("es-ES")
-                          : "-"}
-                      </TableCell>
+
+                      <TableCell>{customer.direccion}</TableCell>
+
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(customer)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(customer)}
+                          >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomer(customer.id)}>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteCustomer(customer.id)}
+                          >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -214,11 +236,12 @@ export default function CustomersPage() {
         </CardContent>
       </Card>
 
+      {/* MODAL */}
       <CustomerDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        onSave={editingCustomer ? handleEditCustomer : handleAddCustomer}
         customer={editingCustomer}
+        onSave={handleSave}
       />
     </div>
   )
